@@ -865,10 +865,18 @@ namespace dlib
                 float fout[4];
                 out.store(fout);
 
-                out_img[r][c]   = static_cast<T>(fout[0]);
-                out_img[r][c+1] = static_cast<T>(fout[1]);
-                out_img[r][c+2] = static_cast<T>(fout[2]);
-                out_img[r][c+3] = static_cast<T>(fout[3]);
+                const auto convert_to_output_type = [](float value)
+                {
+                    if (std::is_integral<T>::value)
+                        return static_cast<T>(value + 0.5);
+                    else
+                        return static_cast<T>(value);
+                };
+
+                out_img[r][c]   = convert_to_output_type(fout[0]);
+                out_img[r][c+1] = convert_to_output_type(fout[1]);
+                out_img[r][c+2] = convert_to_output_type(fout[2]);
+                out_img[r][c+3] = convert_to_output_type(fout[3]);
             }
             x = -x_scale + c*x_scale;
             for (; c < out_img.nc(); ++c)
@@ -1880,6 +1888,12 @@ namespace dlib
         }
 #endif 
 
+        // If nearest-neighbor interpolation is wanted, then don't use an image pyramid.
+        constexpr bool image_pyramid_enabled = !std::is_same<
+            typename std::remove_const<typename std::remove_reference<decltype(interp)>::type>::type,
+            interpolate_nearest_neighbor
+        >::value;
+
         pyramid_down<2> pyr;
         long max_depth = 0;
         // If the chip is supposed to be much smaller than the source subwindow then you
@@ -1894,7 +1908,7 @@ namespace dlib
             long depth = 0;
             double grow = 2;
             drectangle rect = pyr.rect_down(chip_locations[i].rect);
-            while (rect.area() > chip_locations[i].size())
+            while (rect.area() > chip_locations[i].size() && image_pyramid_enabled)
             {
                 rect = pyr.rect_down(rect);
                 ++depth;
@@ -1942,7 +1956,7 @@ namespace dlib
                 // figure out which level in the pyramid to use to extract the chip
                 int level = -1;
                 drectangle rect = translate_rect(chip_locations[i].rect, -bounding_box.tl_corner());
-                while (pyr.rect_down(rect).area() > chip_locations[i].size())
+                while (pyr.rect_down(rect).area() > chip_locations[i].size() && image_pyramid_enabled)
                 {
                     ++level;
                     rect = pyr.rect_down(rect);
